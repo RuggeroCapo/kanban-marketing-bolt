@@ -5,6 +5,7 @@ import Cell from './Cell';
 import StickyNote from './StickyNote';
 import EditTaskDialog from './EditTaskDialog';
 import { getAllTasks, saveTask, moveTask as moveTaskInDb, deleteTask } from '../lib/taskService';
+import { supabase, mapDbTaskToTask } from '../lib/supabase';
 
 const LANE_HEADER_WIDTH = '150px';
 const BACKLOG_COLUMN_WIDTH = '250px';
@@ -24,7 +25,7 @@ const KanbanBoard: React.FC = () => {
   const [searchText, setSearchText] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('');
 
-  // Load tasks from Supabase on component mount
+  // Load tasks from Supabase on component mount and set up realtime subscription
   useEffect(() => {
     const loadTasks = async () => {
       setIsLoading(true);
@@ -44,6 +45,47 @@ const KanbanBoard: React.FC = () => {
     };
     
     loadTasks();
+
+    // Set up realtime subscription for tasks
+    const subscription = supabase
+      .channel('table-db-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'tasks',
+        },
+        (payload) => {
+          console.log('Realtime update:', payload);
+          
+          // Handle different types of changes
+          if (payload.eventType === 'INSERT') {
+            const newTask = mapDbTaskToTask(payload.new);
+            setTasks((currentTasks) => [...currentTasks, newTask]);
+          } 
+          else if (payload.eventType === 'UPDATE') {
+            const updatedTask = mapDbTaskToTask(payload.new);
+            setTasks((currentTasks) => 
+              currentTasks.map((task) => 
+                task.id === updatedTask.id ? updatedTask : task
+              )
+            );
+          } 
+          else if (payload.eventType === 'DELETE') {
+            const deletedTaskId = payload.old.id;
+            setTasks((currentTasks) => 
+              currentTasks.filter((task) => task.id !== deletedTaskId)
+            );
+          }
+        }
+      )
+      .subscribe();
+      
+    // Clean up subscription when component unmounts
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   // Apply filters to tasks
