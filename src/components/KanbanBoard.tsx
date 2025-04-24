@@ -5,7 +5,6 @@ import Cell from './Cell';
 import StickyNote from './StickyNote';
 import EditTaskDialog from './EditTaskDialog';
 import { getAllTasks, saveTask, moveTask as moveTaskInDb, deleteTask } from '../lib/taskService';
-import { supabase, mapDbTaskToTask } from '../lib/supabase';
 
 const LANE_HEADER_WIDTH = '150px';
 const BACKLOG_COLUMN_WIDTH = '250px';
@@ -24,8 +23,9 @@ const KanbanBoard: React.FC = () => {
   // State for search and filtering
   const [searchText, setSearchText] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('');
+  const [tagFilter, setTagFilter] = useState('');
 
-  // Load tasks from Supabase on component mount and set up realtime subscription
+  // Load tasks from Supabase on component mount
   useEffect(() => {
     const loadTasks = async () => {
       setIsLoading(true);
@@ -45,48 +45,20 @@ const KanbanBoard: React.FC = () => {
     };
     
     loadTasks();
-
-    // Set up realtime subscription for tasks
-    const subscription = supabase
-      .channel('table-db-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'tasks',
-        },
-        (payload) => {
-          console.log('Realtime update:', payload);
-          
-          // Handle different types of changes
-          if (payload.eventType === 'INSERT') {
-            const newTask = mapDbTaskToTask(payload.new);
-            setTasks((currentTasks) => [...currentTasks, newTask]);
-          } 
-          else if (payload.eventType === 'UPDATE') {
-            const updatedTask = mapDbTaskToTask(payload.new);
-            setTasks((currentTasks) => 
-              currentTasks.map((task) => 
-                task.id === updatedTask.id ? updatedTask : task
-              )
-            );
-          } 
-          else if (payload.eventType === 'DELETE') {
-            const deletedTaskId = payload.old.id;
-            setTasks((currentTasks) => 
-              currentTasks.filter((task) => task.id !== deletedTaskId)
-            );
-          }
-        }
-      )
-      .subscribe();
-      
-    // Clean up subscription when component unmounts
-    return () => {
-      subscription.unsubscribe();
-    };
   }, []);
+  
+  // Get all unique tags from all tasks
+  const availableTags = useMemo(() => {
+    const tagSet = new Set<string>();
+    
+    tasks.forEach(task => {
+      if (task.tags && task.tags.length > 0) {
+        task.tags.forEach(tag => tagSet.add(tag));
+      }
+    });
+    
+    return Array.from(tagSet).sort();
+  }, [tasks]);
 
   // Apply filters to tasks
   const filteredTasks = useMemo(() => {
@@ -99,9 +71,12 @@ const KanbanBoard: React.FC = () => {
       // Priority filter
       const matchesPriority = !priorityFilter || task.priority === priorityFilter;
       
-      return matchesSearch && matchesPriority;
+      // Tag filter
+      const matchesTag = !tagFilter || (task.tags && task.tags.includes(tagFilter));
+      
+      return matchesSearch && matchesPriority && matchesTag;
     });
-  }, [tasks, searchText, priorityFilter]);
+  }, [tasks, searchText, priorityFilter, tagFilter]);
 
   const backlogColumn = useMemo(() => columns.find(col => col.id === 'backlog'), [columns]);
   const mainGridColumns = useMemo(() => columns.filter(col => col.id !== 'backlog'), [columns]);
@@ -297,6 +272,19 @@ const KanbanBoard: React.FC = () => {
               <option value="high" className="text-gray-800">Alta Priorità</option>
               <option value="medium" className="text-gray-800">Media Priorità</option>
               <option value="low" className="text-gray-800">Bassa Priorità</option>
+            </select>
+            
+            <select 
+              value={tagFilter}
+              onChange={(e) => setTagFilter(e.target.value)}
+              className="bg-white/20 border border-white/30 rounded-md text-sm py-1 px-2 focus:outline-none focus:ring-2 focus:ring-white/50 text-white"
+            >
+              <option value="" className="text-gray-800">Tutti i Tag</option>
+              {availableTags.map(tag => (
+                <option key={tag} value={tag} className="text-gray-800">
+                  {tag}
+                </option>
+              ))}
             </select>
           </div>
         </div>
