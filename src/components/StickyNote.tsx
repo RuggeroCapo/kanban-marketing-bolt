@@ -1,6 +1,6 @@
 import React from 'react';
 import { Task } from '../types';
-import { GripVertical } from 'lucide-react';
+import { GripVertical, Calendar } from 'lucide-react';
 
 interface StickyNoteProps {
   task: Task;
@@ -23,6 +23,41 @@ const StickyNote: React.FC<StickyNoteProps> = ({ task, onClick }) => {
 
   const handleDragEnd = (e: React.DragEvent<HTMLDivElement>) => {
     e.currentTarget.classList.remove('opacity-60', 'scale-95', 'shadow-lg', 'rotate-1');
+  };
+
+  // Function to generate Google Calendar URL
+  const generateGoogleCalendarUrl = () => {
+    // Format the title for the URL
+    const title = encodeURIComponent(task.content);
+    
+    // Format the dates - if dueDate exists, create an all-day event on that date
+    let dateParam = '';
+    if (task.dueDate) {
+      const date = new Date(task.dueDate + 'T00:00:00');
+      // Format: YYYYMMDD/YYYYMMDD for all-day event
+      const formattedDate = date.toISOString().replace(/-|:|\.\d+/g, '').split('T')[0];
+      // For an all-day event, use the same date for start and end
+      dateParam = `${formattedDate}/${formattedDate}`;
+    }
+    
+    // Format details with tags and priority
+    let details = '';
+    if (task.priority) {
+      details += `Priorità: ${task.priority}\n`;
+    }
+    if (task.tags && task.tags.length > 0) {
+      details += `Tags: ${task.tags.join(', ')}`;
+    }
+    
+    // Build the final URL
+    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${dateParam}&details=${encodeURIComponent(details)}`;
+  };
+
+  // Handle adding to Google Calendar
+  const handleAddToCalendar = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent triggering the onClick of the parent div
+    const url = generateGoogleCalendarUrl();
+    window.open(url, '_blank');
   };
 
   // Determine background color based on priority
@@ -98,8 +133,20 @@ const StickyNote: React.FC<StickyNoteProps> = ({ task, onClick }) => {
             </span>
           ))}
         </div>
-        {/* Drag Handle */}
-        <GripVertical size={14} className="text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab flex-shrink-0 ml-1" />
+        <div className="flex items-center space-x-1">
+          {/* Google Calendar Button - Only show if there's a due date */}
+          {task.dueDate && (
+            <button
+              onClick={handleAddToCalendar}
+              className="text-blue-500 hover:text-blue-700 p-1 rounded hover:bg-blue-50 transition-colors opacity-0 group-hover:opacity-100"
+              title="Aggiungi a Google Calendar"
+            >
+              <Calendar size={14} />
+            </button>
+          )}
+          {/* Drag Handle */}
+          <GripVertical size={14} className="text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab flex-shrink-0" />
+        </div>
       </div>
     </div>
   );

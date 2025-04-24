@@ -303,22 +303,3 @@ const EditTaskDialog: React.FC<EditTaskDialogProps> = ({ task, isOpen, onClose, 
 
 export default EditTaskDialog;
 
-// Add keyframes for animations in index.css if they don't exist
-/*
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-@layer utilities {
-  @keyframes overlayShow {
-    from { opacity: 0; }
-    to { opacity: 1; }
-  }
-  @keyframes contentShow {
-    from { opacity: 0; transform: translate(-50%, -48%) scale(0.96); }
-    to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-  }
-  .animate-overlayShow { animation: overlayShow 150ms cubic-bezier(0.16, 1, 0.3, 1); }
-  .animate-contentShow { animation: contentShow 150ms cubic-bezier(0.16, 1, 0.3, 1); }
-}
-*/
