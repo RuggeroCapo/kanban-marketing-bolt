@@ -2,30 +2,23 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Ensure html and body take full height for h-screen to work correctly */
-html, body, #root {
-  height: 100%;
+@layer utilities {
+  @keyframes overlayShow {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes contentShow {
+    from { opacity: 0; transform: translate(-50%, -48%) scale(0.96); }
+    to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  }
+  .animate-overlayShow { animation: overlayShow 150ms cubic-bezier(0.16, 1, 0.3, 1); }
+  .animate-contentShow { animation: contentShow 150ms cubic-bezier(0.16, 1, 0.3, 1); }
+}
+
+/* Add other global styles if needed */
+body {
+  font-family: sans-serif;
   margin: 0;
-  padding: 0;
-  overflow: hidden; /* Prevent body scrollbars if flex container handles scrolling */
-}
-
-/* Optional: Style scrollbars for a cleaner look */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: #f1f1f1;
-  border-radius: 10px;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
-  border-radius: 10px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #a1a1a1;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }

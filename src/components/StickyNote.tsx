@@ -1,34 +1,13 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React from 'react';
 import { Task } from '../types';
-import { GripVertical } from 'lucide-react'; // Corrected icon import
+import { GripVertical } from 'lucide-react';
 
 interface StickyNoteProps {
   task: Task;
-  updateTaskContent: (taskId: string, newContent: string) => void;
+  onClick: () => void; // Changed from updateTaskContent to onClick for dialog trigger
 }
 
-const StickyNote: React.FC<StickyNoteProps> = ({ task, updateTaskContent }) => {
-  const [isEditing, setIsEditing] = useState(false);
-  const [content, setContent] = useState(task.content);
-  const contentRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    setContent(task.content); // Update local state if task prop changes externally
-  }, [task.content]);
-
-  const handleBlur = () => {
-    setIsEditing(false);
-    if (content.trim() !== task.content) {
-      updateTaskContent(task.id, content.trim());
-    }
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault(); // Prevent new line on Enter
-      contentRef.current?.blur(); // Trigger blur to save
-    }
-  };
+const StickyNote: React.FC<StickyNoteProps> = ({ task, onClick }) => {
 
   const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
     e.dataTransfer.setData('taskId', task.id);
@@ -42,12 +21,26 @@ const StickyNote: React.FC<StickyNoteProps> = ({ task, updateTaskContent }) => {
   // Determine background color based on priority
   const getPriorityColor = (priority?: 'low' | 'medium' | 'high') => {
     switch (priority) {
-      case 'high': return 'bg-red-100 border-red-300';
-      case 'medium': return 'bg-yellow-100 border-yellow-300';
-      case 'low': return 'bg-green-100 border-green-300';
-      default: return 'bg-white border-gray-300';
+      case 'high': return 'bg-red-100 border-red-300 hover:bg-red-200';
+      case 'medium': return 'bg-yellow-100 border-yellow-300 hover:bg-yellow-200';
+      case 'low': return 'bg-green-100 border-green-300 hover:bg-green-200';
+      default: return 'bg-white border-gray-300 hover:bg-gray-50';
     }
   };
+
+  // Format date for display
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return '';
+    try {
+      // Basic formatting, adjust as needed
+      const date = new Date(dateString + 'T00:00:00'); // Assume local timezone if none specified
+      return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    } catch (e) {
+      console.error("Error formatting date:", e);
+      return dateString; // Return original string if formatting fails
+    }
+  };
+
 
   return (
     <div
@@ -55,31 +48,38 @@ const StickyNote: React.FC<StickyNoteProps> = ({ task, updateTaskContent }) => {
       draggable
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
-      className={`p-2 mb-2 rounded shadow border cursor-grab ${getPriorityColor(task.priority)} min-h-[80px] flex flex-col justify-between group`}
-      onClick={() => !isEditing && setIsEditing(true)} // Allow editing on click
+      className={`p-2 mb-2 rounded shadow border cursor-pointer ${getPriorityColor(task.priority)} min-h-[80px] flex flex-col justify-between group transition-colors duration-150`}
+      onClick={onClick} // Trigger dialog on click
     >
+      {/* Display Content (Not Editable Here) */}
       <div
-        ref={contentRef}
-        contentEditable={isEditing}
-        suppressContentEditableWarning={true}
-        className={`text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 rounded px-1 py-0.5 ${isEditing ? 'cursor-text' : 'cursor-pointer'} flex-grow`}
-        onBlur={handleBlur}
-        onKeyDown={handleKeyDown}
-        style={{ minHeight: '40px' }} // Ensure minimum height for editing
+        className="text-sm break-words flex-grow" // Use break-words for long content
+        style={{ minHeight: '40px' }} // Ensure minimum height
       >
-        {content}
+        {task.content}
       </div>
+
+      {/* Footer for Meta Info and Drag Handle */}
       <div className="mt-1 text-xs text-gray-500 flex justify-between items-center">
-        <div>
-          {task.dueDate && <span className="mr-2">📅 {task.dueDate}</span>}
+        <div className="flex items-center flex-wrap gap-x-2 gap-y-1">
+          {/* Due Date */}
+          {task.dueDate && (
+            <span className="flex items-center whitespace-nowrap">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 mr-0.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              {formatDate(task.dueDate)}
+            </span>
+          )}
+          {/* Tags */}
           {task.tags && task.tags.map(tag => (
-            <span key={tag} className="inline-block bg-gray-200 rounded px-1.5 py-0.5 text-xs font-semibold text-gray-700 mr-1">
+            <span key={tag} className="inline-block bg-gray-200 rounded px-1.5 py-0.5 text-xs font-semibold text-gray-700 whitespace-nowrap">
               #{tag}
             </span>
           ))}
         </div>
-        {/* Use GripVertical icon for drag handle */}
-        <GripVertical size={14} className="text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab" />
+        {/* Drag Handle */}
+        <GripVertical size={14} className="text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab flex-shrink-0 ml-1" />
       </div>
     </div>
   );

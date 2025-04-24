@@ -3,6 +3,7 @@ import { initialColumns, initialLanes, initialTasks } from '../data';
 import { Column, Lane, Task } from '../types';
 import Cell from './Cell';
 import StickyNote from './StickyNote';
+import EditTaskDialog from './EditTaskDialog'; // Import the dialog
 
 const LANE_HEADER_WIDTH = '150px';
 const BACKLOG_COLUMN_WIDTH = '250px';
@@ -12,6 +13,10 @@ const KanbanBoard: React.FC = () => {
   const [columns] = useState<Column[]>(initialColumns);
   const [lanes] = useState<Lane[]>(initialLanes);
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
+
+  // State for managing the edit dialog
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
 
   const backlogColumn = useMemo(() => columns.find(col => col.id === 'backlog'), [columns]);
   const mainGridColumns = useMemo(() => columns.filter(col => col.id !== 'backlog'), [columns]);
@@ -34,9 +39,13 @@ const KanbanBoard: React.FC = () => {
       content: 'Nuovo Task...',
       columnId,
       laneId,
+      // Optionally set default priority/tags/etc.
     };
     setTasks(prevTasks => [...prevTasks, newTask]);
-    console.log(`Created task in col ${columnId}, lane ${laneId}`);
+    // Open dialog immediately to edit the new task
+    setEditingTask(newTask);
+    setIsEditDialogOpen(true);
+    console.log(`Created task in col ${columnId}, lane ${laneId}, opening edit dialog.`);
   };
 
    const createBacklogTask = () => {
@@ -44,20 +53,38 @@ const KanbanBoard: React.FC = () => {
       id: `task-${Date.now()}-${Math.random().toString(16).slice(2)}`,
       content: 'Nuovo Task Backlog...',
       columnId: 'backlog',
-      laneId: '',
+      laneId: '', // Backlog tasks don't have a laneId
     };
     setTasks(prevTasks => [...prevTasks, newTask]);
-    console.log(`Created task in backlog`);
+     // Open dialog immediately to edit the new task
+    setEditingTask(newTask);
+    setIsEditDialogOpen(true);
+    console.log(`Created task in backlog, opening edit dialog.`);
   };
 
-  const updateTaskContent = (taskId: string, newContent: string) => {
+  // Function to open the dialog for a specific task
+  const handleEditTask = (task: Task) => {
+    setEditingTask(task);
+    setIsEditDialogOpen(true);
+  };
+
+  // Function to close the dialog
+  const handleCloseDialog = () => {
+    setIsEditDialogOpen(false);
+    setEditingTask(null); // Clear the task being edited
+  };
+
+  // Function to save changes from the dialog
+  const handleSaveTask = (updatedTask: Task) => {
     setTasks(prevTasks =>
       prevTasks.map(task =>
-        task.id === taskId ? { ...task, content: newContent } : task
+        task.id === updatedTask.id ? updatedTask : task
       )
     );
-    console.log(`Task ${taskId} content updated to: ${newContent}`);
+    handleCloseDialog(); // Close the dialog after saving
+    console.log(`Task ${updatedTask.id} updated.`);
   };
+
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -97,7 +124,7 @@ const KanbanBoard: React.FC = () => {
     const targetColumnId = backlogDiv.dataset.columnId;
 
     if (taskId && targetColumnId) {
-      moveTask(taskId, targetColumnId, null);
+      moveTask(taskId, targetColumnId, null); // Move to backlog, laneId is null/irrelevant
     } else {
          console.error("Drop failed: Missing data attributes on backlog", {taskId, targetColumnId});
     }
@@ -126,17 +153,21 @@ const KanbanBoard: React.FC = () => {
           onDrop={handleDropOnBacklog}
           data-column-id={backlogColumn.id}
         >
-          {/* Backlog Header - Apply fixed height and alignment */}
+          {/* Backlog Header */}
           <div
             className="p-3 bg-gray-300 text-center font-semibold text-gray-800 border-b border-gray-300 sticky top-0 z-10 flex items-center justify-center"
             style={{ height: HEADER_HEIGHT }} // Apply fixed height
           >
             {backlogColumn.title}
           </div>
-          {/* Backlog Task List - Allow vertical scroll */}
+          {/* Backlog Task List */}
           <div className="flex-grow overflow-y-auto p-2 space-y-2" onDoubleClick={createBacklogTask}>
             {backlogTasks.map(task => (
-              <StickyNote key={task.id} task={task} updateTaskContent={updateTaskContent} />
+              <StickyNote
+                key={task.id}
+                task={task}
+                onClick={() => handleEditTask(task)} // Pass handler to open dialog
+              />
             ))}
             {backlogTasks.length === 0 && (
                <div className="text-center text-gray-400 text-xs pt-10">Double-click to add</div>
@@ -145,23 +176,22 @@ const KanbanBoard: React.FC = () => {
         </div>
 
         {/* Main Board Container (Scrollable Horizontally) */}
-        <div className="flex-grow overflow-x-auto overflow-y-hidden"> {/* Allow x-scroll, prevent y-scroll here */}
+        <div className="flex-grow overflow-x-auto overflow-y-hidden">
           <div
-            className="grid gap-0 relative h-full" // Make grid take full height of its container
+            className="grid gap-0 relative h-full"
             style={{
               gridTemplateColumns: `${LANE_HEADER_WIDTH} repeat(${mainGridColumns.length}, minmax(200px, 1fr))`,
-              // Header row + content taking remaining space
-              gridTemplateRows: `${HEADER_HEIGHT} minmax(0, 1fr)`, // Header row fixed height, content takes rest
+              gridTemplateRows: `${HEADER_HEIGHT} minmax(0, 1fr)`,
               minWidth: `calc(${LANE_HEADER_WIDTH} + ${mainGridColumns.length * 200}px)`,
             }}
           >
-            {/* Top-left empty corner - Apply fixed height */}
+            {/* Top-left empty corner */}
             <div
               className="sticky top-0 left-0 z-30 bg-gray-100 border-b border-r border-gray-300"
-              style={{ height: HEADER_HEIGHT }} // Match header height
+              style={{ height: HEADER_HEIGHT }}
             ></div>
 
-            {/* Main Grid Column Headers - Apply fixed height and alignment */}
+            {/* Main Grid Column Headers */}
             {mainGridColumns.map((column, index) => (
               <div
                 key={column.id}
@@ -169,40 +199,38 @@ const KanbanBoard: React.FC = () => {
                 style={{
                   gridColumn: index + 2,
                   gridRow: 1,
-                  height: HEADER_HEIGHT // Apply fixed height
+                  height: HEADER_HEIGHT
                 }}
               >
                 {column.title}
               </div>
             ))}
 
-            {/* Lane Headers and Cells Container (Scrollable Vertically) */}
-            {/* We need a container for the lanes/cells part to handle its own vertical scroll */}
+            {/* Lane Headers Container */}
             <div
-              className="col-start-1 col-span-1 row-start-2 row-span-1 overflow-y-auto sticky left-0 z-20" // Lane headers container
-              style={{ gridRow: '2 / -1', gridColumn: '1 / 2' }} // Span all lane rows
+              className="col-start-1 col-span-1 row-start-2 row-span-1 overflow-y-auto sticky left-0 z-20"
+              style={{ gridRow: '2 / -1', gridColumn: '1 / 2' }}
             >
                  {lanes.map((lane) => (
                     <div
                         key={lane.id}
-                        className="bg-blue-100 p-2 shadow flex items-center justify-center text-center font-semibold text-blue-800 border-b border-r border-gray-300 min-h-[150px]" // Ensure min height for visibility
-                        // Removed sticky here, handled by parent div
+                        className="bg-blue-100 p-2 shadow flex items-center justify-center text-center font-semibold text-blue-800 border-b border-r border-gray-300 min-h-[150px]"
                     >
                         {lane.title}
                     </div>
                  ))}
             </div>
 
+            {/* Cells Container */}
             <div
-              className="col-start-2 col-span-full row-start-2 row-span-1 overflow-auto" // Cells container - SCROLLS
+              className="col-start-2 col-span-full row-start-2 row-span-1 overflow-auto"
               style={{ gridRow: '2 / -1', gridColumn: `2 / ${mainGridColumns.length + 2}` }}
             >
                 <div
-                    className="grid gap-0" // Inner grid for just the cells
+                    className="grid gap-0"
                     style={{
                         gridTemplateColumns: `repeat(${mainGridColumns.length}, minmax(200px, 1fr))`,
-                        gridTemplateRows: `repeat(${lanes.length}, auto)`, // Rows based on lanes
-                        // This inner grid's height will grow, the parent div scrolls
+                        gridTemplateRows: `repeat(${lanes.length}, auto)`,
                     }}
                 >
                     {lanes.map((lane, laneIndex) => (
@@ -213,7 +241,7 @@ const KanbanBoard: React.FC = () => {
                             <div
                                 key={`${column.id}-${lane.id}`}
                                 className="bg-white border-b border-r border-gray-300 min-h-[150px]"
-                                style={{ gridRow: laneIndex + 1, gridColumn: colIndex + 1 }} // Relative to inner grid
+                                style={{ gridRow: laneIndex + 1, gridColumn: colIndex + 1 }}
                                 onDragOver={handleDragOver}
                                 onDragLeave={handleDragLeave}
                                 onDrop={handleDropOnCell}
@@ -223,11 +251,12 @@ const KanbanBoard: React.FC = () => {
                                 data-column-id={column.id}
                                 data-lane-id={lane.id}
                             >
+                                {/* Pass handleEditTask down to Cell */}
                                 <Cell
-                                columnId={column.id}
-                                laneId={lane.id}
-                                tasks={cellTasks}
-                                updateTaskContent={updateTaskContent}
+                                  columnId={column.id}
+                                  laneId={lane.id}
+                                  tasks={cellTasks}
+                                  onEditTask={handleEditTask} // Pass down the handler
                                 />
                             </div>
                             );
@@ -239,6 +268,14 @@ const KanbanBoard: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Render the Edit Task Dialog */}
+      <EditTaskDialog
+        task={editingTask}
+        isOpen={isEditDialogOpen}
+        onClose={handleCloseDialog}
+        onSave={handleSaveTask}
+      />
     </div>
   );
 };
