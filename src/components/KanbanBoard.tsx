@@ -4,6 +4,7 @@ import { Column, Lane, Task } from '../types';
 import Cell from './Cell';
 import StickyNote from './StickyNote';
 import EditTaskDialog from './EditTaskDialog';
+import ImportTasksDialog from './ImportTasksDialog';
 import { getAllTasks, saveTask, moveTask as moveTaskInDb, deleteTask } from '../lib/taskService';
 
 const LANE_HEADER_WIDTH = '150px';
@@ -19,11 +20,14 @@ const KanbanBoard: React.FC = () => {
   // State for managing the edit dialog
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
-  
+
   // State for search and filtering
   const [searchText, setSearchText] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('');
   const [tagFilter, setTagFilter] = useState('');
+
+  // State for managing the import dialog
+  const [isImportDialogOpen, setIsImportDialogOpen] = useState(false);
 
   // Load tasks from Supabase on component mount
   useEffect(() => {
@@ -43,20 +47,20 @@ const KanbanBoard: React.FC = () => {
         setIsLoading(false);
       }
     };
-    
+
     loadTasks();
   }, []);
-  
+
   // Get all unique tags from all tasks
   const availableTags = useMemo(() => {
     const tagSet = new Set<string>();
-    
+
     tasks.forEach(task => {
       if (task.tags && task.tags.length > 0) {
         task.tags.forEach(tag => tagSet.add(tag));
       }
     });
-    
+
     return Array.from(tagSet).sort();
   }, [tasks]);
 
@@ -67,13 +71,13 @@ const KanbanBoard: React.FC = () => {
       const matchesSearch = !searchText || 
         (task.content && task.content.toLowerCase().includes(searchText.toLowerCase())) ||
         (task.tags && task.tags.some(tag => tag.toLowerCase().includes(searchText.toLowerCase())));
-      
+
       // Priority filter
       const matchesPriority = !priorityFilter || task.priority === priorityFilter;
-      
+
       // Tag filter
       const matchesTag = !tagFilter || (task.tags && task.tags.includes(tagFilter));
-      
+
       return matchesSearch && matchesPriority && matchesTag;
     });
   }, [tasks, searchText, priorityFilter, tagFilter]);
@@ -84,7 +88,7 @@ const KanbanBoard: React.FC = () => {
 
   const moveTask = (taskId: string, targetColumnId: string, targetLaneId: string | null) => {
     console.log(`Moving task ${taskId} to col ${targetColumnId}, lane ${targetLaneId}`);
-    
+
     // Update local state
     setTasks(prevTasks =>
       prevTasks.map(task =>
@@ -93,7 +97,7 @@ const KanbanBoard: React.FC = () => {
           : task
       )
     );
-    
+
     // Update in Supabase (for non-temporary IDs)
     if (!taskId.startsWith('task-')) {
       moveTaskInDb(taskId, targetColumnId, targetLaneId ?? '')
@@ -146,7 +150,7 @@ const KanbanBoard: React.FC = () => {
   const handleDeleteTask = (taskId: string) => {
     // Remove from local state immediately
     setTasks(prevTasks => prevTasks.filter(task => task.id !== taskId));
-    
+
     // Delete from Supabase (only if it's not a temporary task)
     if (!taskId.startsWith('task-')) {
       deleteTask(taskId).catch(err => {
@@ -182,6 +186,42 @@ const KanbanBoard: React.FC = () => {
 
     handleCloseDialog(); // Close the dialog after saving
     console.log(`Task ${updatedTask.id} updated.`);
+  };
+
+  // Function to handle imported tasks
+  const handleImportTasks = (importedTasks: Task[]) => {
+    // For each imported task, we need to assign a lane if it's not in the backlog
+    const processedTasks = importedTasks.map(task => {
+      // If the task is not in the backlog and doesn't have a laneId, assign it to the first lane
+      if (task.columnId !== 'backlog' && (!task.laneId || task.laneId === '')) {
+        return {
+          ...task,
+          laneId: lanes.length > 0 ? lanes[0].id : '',
+        };
+      }
+      return task;
+    });
+
+    // Add the imported tasks to the local state
+    setTasks(prevTasks => [...prevTasks, ...processedTasks]);
+
+    // Save each task to Supabase
+    processedTasks.forEach(task => {
+      saveTask(task).then(savedTask => {
+        if (savedTask) {
+          // Update the local state with the saved task (which has a permanent ID)
+          setTasks(prevTasks =>
+            prevTasks.map(t =>
+              t.id === task.id ? savedTask : t
+            )
+          );
+        }
+      }).catch(err => {
+        console.error('Failed to save imported task to database:', err);
+      });
+    });
+
+    console.log(`Imported ${processedTasks.length} tasks.`);
   };
 
 
@@ -242,12 +282,12 @@ const KanbanBoard: React.FC = () => {
           <p className="text-lg font-medium text-gray-700">Loading Kanban Board...</p>
         </div>
       )}
-      
+
       {/* Enhanced Header with gradient and better styling */}
       <header className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white p-4 shadow-md">
         <div className="container mx-auto flex justify-between items-center">
           <h1 className="text-2xl font-bold">Bacheca Kanban Marketing</h1>
-          
+
           {/* Filter and Search Controls */}
           <div className="flex items-center space-x-4">
             <div className="relative">
@@ -262,7 +302,7 @@ const KanbanBoard: React.FC = () => {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
-            
+
             <select 
               value={priorityFilter}
               onChange={(e) => setPriorityFilter(e.target.value)}
@@ -273,7 +313,7 @@ const KanbanBoard: React.FC = () => {
               <option value="medium" className="text-gray-800">Media Priorità</option>
               <option value="low" className="text-gray-800">Bassa Priorità</option>
             </select>
-            
+
             <select 
               value={tagFilter}
               onChange={(e) => setTagFilter(e.target.value)}
@@ -286,6 +326,17 @@ const KanbanBoard: React.FC = () => {
                 </option>
               ))}
             </select>
+
+            {/* Import Button - Subtle and Minimalistic */}
+            <button
+              onClick={() => setIsImportDialogOpen(true)}
+              className="text-white/70 hover:text-white p-1.5 rounded-full focus:outline-none focus:ring-1 focus:ring-white/30 transition-colors duration-200"
+              title="Importa task da JSON"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+              </svg>
+            </button>
           </div>
         </div>
       </header>
@@ -308,12 +359,12 @@ const KanbanBoard: React.FC = () => {
             style={{ height: HEADER_HEIGHT }} // Apply fixed height
           >
             <span className="flex-grow text-center">{backlogColumn.title}</span>
-            
+
             {/* Task Counter Badge */}
             <span className="inline-flex items-center justify-center w-6 h-6 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
               {backlogTasks.length}
             </span>
-            
+
             {/* Add Task Button */}
             <button 
               className="ml-2 p-1 rounded-full hover:bg-gray-400 text-gray-600 transition-colors duration-200"
@@ -372,7 +423,7 @@ const KanbanBoard: React.FC = () => {
             {mainGridColumns.map((column, index) => {
               // Count tasks in this column for the counter badge
               const columnTaskCount = filteredTasks.filter(task => task.columnId === column.id).length;
-              
+
               return (
                 <div
                   key={column.id}
@@ -384,12 +435,12 @@ const KanbanBoard: React.FC = () => {
                   }}
                 >
                   <span className="flex-grow text-center">{column.title}</span>
-                  
+
                   {/* Task Counter Badge */}
                   <span className="inline-flex items-center justify-center w-6 h-6 ml-2 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
                     {columnTaskCount}
                   </span>
-                  
+
                   {/* Add Task Button */}
                   <button 
                     className="ml-2 p-1 rounded-full hover:bg-gray-300 text-gray-600 transition-colors duration-200"
@@ -486,6 +537,13 @@ const KanbanBoard: React.FC = () => {
         onClose={handleCloseDialog}
         onSave={handleSaveTask}
         onDelete={handleDeleteTask}
+      />
+
+      {/* Render the Import Tasks Dialog */}
+      <ImportTasksDialog
+        isOpen={isImportDialogOpen}
+        onClose={() => setIsImportDialogOpen(false)}
+        onImport={handleImportTasks}
       />
     </div>
   );
